@@ -5,7 +5,7 @@ import qualified Data.Set as S                             ( delete
                                                            , member
                                                            , size
                                                            )
-import Data.List                                           ( intercalate )
+import Data.List                                          
 import Control.Concurrent                                  ( threadDelay )
 import System.IO                                           ( hFlush
                                                            , stdout
@@ -38,10 +38,15 @@ import System.IO                                           ( BufferMode(LineBuff
 
 data Block = Empty | Solid | Pacman | Ghost deriving (Show, Read, Eq)
 
+
+
 type Entity = (Int, Int, Int)
 type Board = [[Block]]
 
-type GameState = (Board, Entity)
+type GameState = (Board, [Entity])
+
+map_size::Int
+map_size = 7
 
 
 first::Entity->Int
@@ -56,6 +61,7 @@ third (a,b,c) = c
 
 getBoardBlock::Board->Entity->Block
 getBoardBlock gameBoard selector = gameBoard !! (first selector) !! (second selector)
+
 initialBoard::Board
 initialBoard = [ [Solid , Solid  , Solid , Solid , Solid , Solid , Solid]
                , [Solid , Pacman , Empty , Empty , Empty , Empty , Solid]
@@ -68,12 +74,25 @@ initialBoard = [ [Solid , Solid  , Solid , Solid , Solid , Solid , Solid]
 
 
 initialPacmanPosition::Entity
-initialPacmanPosition = (1,1,1)
+initialPacmanPosition = (1,1,0)
 initialGhostPosition::Entity
-initialGhostPosition = (3,4,0)
+initialGhostPosition = (3,4,1)
 
 modifyRightEntity::Entity->Entity
 modifyRightEntity ent = (first ent, second ent + 1, third ent)
+
+modifyLeftEntity::Entity->Entity
+modifyLeftEntity ent = (first ent, second ent - 1, third ent)
+
+modifyDownEntity::Entity->Entity
+modifyDownEntity ent = (first ent + 1, second ent, third ent)
+
+modifyUpEntity::Entity->Entity
+modifyUpEntity ent = (first ent - 1, second ent, third ent)
+
+getEntityBlock::Entity->Block
+getEntityBlock (a,b,0) = Pacman
+getEntityBlock (a,b,1) = Ghost
 
 
 moveRightEntity::Board-> Entity->Board
@@ -81,17 +100,41 @@ moveRightEntity inputList ent =
 	let aux1 = zip [0..] inputList
 	    aux2 = map (\(i,l) -> (i,zip [0..] l)) aux1
 	    aux3 = map (\(i,l) -> map (\(j,x) -> ((i,j),x)) l) aux2
-	    aux4 = map (\((a,b),z) -> if (a,b) == (first ent, second ent) then ((a,b), Empty)  else  if (a,b) ==(first ent, second ent + 1) then ((a,b), Pacman) else ((a,b),z)) $ concat aux3
-	in  chunksOf 7 $ map snd aux4
+	    aux4 = map (\((a,b),z) -> if (a,b) == (first ent, second ent) then ((a,b), Empty)  else  if (a,b) ==(first ent, second ent + 1) then ((a,b), getEntityBlock ent) else ((a,b),z)) $ concat aux3
+	in  chunksOf map_size $ map snd aux4
+
+moveLeftEntity::Board-> Entity->Board
+moveLeftEntity inputList ent =
+  let aux1 = zip [0..] inputList
+      aux2 = map (\(i,l) -> (i,zip [0..] l)) aux1
+      aux3 = map (\(i,l) -> map (\(j,x) -> ((i,j),x)) l) aux2
+      aux4 = map (\((a,b),z) -> if (a,b) == (first ent, second ent) then ((a,b), Empty)  else  if (a,b) == (first ent, second ent - 1) then ((a,b),  getEntityBlock ent) else ((a,b),z)) $ concat aux3
+  in  chunksOf map_size $ map snd aux4
+
+
+moveDownEntity::Board-> Entity->Board
+moveDownEntity inputList ent =
+  let aux1 = zip [0..] inputList
+      aux2 = map (\(i,l) -> (i,zip [0..] l)) aux1
+      aux3 = map (\(i,l) -> map (\(j,x) -> ((i,j),x)) l) aux2
+      aux4 = map (\((a,b),z) -> if (a,b) == (first ent, second ent) then ((a,b), Empty)  else  if (a,b) == (first ent + 1, second ent) then ((a,b),  getEntityBlock ent) else ((a,b),z)) $ concat aux3
+  in  chunksOf map_size $ map snd aux4
+
+moveUpEntity::Board-> Entity->Board
+moveUpEntity inputList ent =
+  let aux1 = zip [0..] inputList
+      aux2 = map (\(i,l) -> (i,zip [0..] l)) aux1
+      aux3 = map (\(i,l) -> map (\(j,x) -> ((i,j),x)) l) aux2
+      aux4 = map (\((a,b),z) -> if (a,b) == (first ent, second ent) then ((a,b), Empty)  else  if (a,b) == (first ent - 1, second ent) then ((a,b),  getEntityBlock ent) else ((a,b),z)) $ concat aux3
+  in  chunksOf map_size $ map snd aux4
 
 
 
 
 entityStringPusher::Int->String
 entityStringPusher x = case x of 0 -> "P"--"▲"
-                                 1 -> "P"--"▼"
-                                 2 -> "P"--"◀"
-                                 3 -> "P"--"▶"
+                                 1 -> "G"--"▼"
+                               
 {-
 0->Empty
 1->Pacman Up
@@ -101,34 +144,58 @@ entityStringPusher x = case x of 0 -> "P"--"▲"
 5->Globe
 6->Ghost
 -}
-printBlock::Block->String
-printBlock Solid  = " [X] "
-printBlock Empty  = " [ ] "
-printBlock Ghost  = " [G] "
-printBlock Pacman = " [P] "
+printBlock::Block->Entity->String
+printBlock Solid  _ = " [X] "
+printBlock Empty  _ = " [ ] "
+printBlock Pacman _ = " [P] "
+printBlock Ghost  _ = " [G] "
+printBlock _ ent    = " [" ++ (entityStringPusher $ third ent) ++ "] "
 
-printRow::[Block]->String
-printRow boardRow  = ( concat $ map (\x -> printBlock x ) boardRow ) ++ "\n"
+printRow::[Block]->Entity->String
+printRow boardRow ent = ( concat $ map (\x -> printBlock x ent) boardRow ) ++ "\n"
 
-printBoard::Board->IO()
-printBoard gameBoard = putStrLn (concat $ map (\x -> printRow x ) gameBoard)
+printBoard::Board->Entity->IO()
+printBoard gameBoard ent = putStrLn (concat $ map (\x -> printRow x ent) gameBoard)
 
 pureStepperFunction :: Board -> Entity -> Maybe Char -> Board
 pureStepperFunction board ent (Just 'd') = moveRightEntity board ent
+pureStepperFunction board ent (Just 's') = moveDownEntity board ent
+pureStepperFunction board ent (Just 'a') = moveLeftEntity board ent
+pureStepperFunction board ent (Just 'w') = moveUpEntity board ent
+pureStepperFunction board _ _ = board
 
 entityStepperFunction :: Entity -> Maybe Char -> Entity
 entityStepperFunction ent (Just 'd') = modifyRightEntity ent
+entityStepperFunction ent (Just 's') = modifyDownEntity ent
+entityStepperFunction ent (Just 'a') = modifyLeftEntity ent
+entityStepperFunction ent (Just 'w') = modifyUpEntity ent
+entityStepperFunction ent _ = ent
 
-firstRun::GameState -> IO GameState
-firstRun gameState = do
+generateNewEntityList::[Entity]->Entity->Int->[Entity]
+generateNewEntityList entity_list new_entity position = 
+  let aux1 = zip entity_list [0..]
+      aux2 = map (\(ent,index) -> if index == position then (new_entity, index) else (ent, index)) aux1
+  in  map (fst) aux2
+
+firstRun::Int->GameState->IO GameState
+firstRun frecv gameState = do
   clearScreen
-  printBoard (fst gameState)
+  printBoard (fst gameState) ((snd gameState)!!frecv)
   maybeKeyboardInput <- runInputT defaultSettings $ getInputChar ""
   when ( maybeKeyboardInput == Just 'q' ) exitSuccess
-  let incompleteGameState = pureStepperFunction (fst gameState) (snd gameState) maybeKeyboardInput
-  let new_entity          = entityStepperFunction (snd gameState) maybeKeyboardInput
-  return ((incompleteGameState, new_entity) :: GameState)
+  let incompleteGameState = pureStepperFunction (fst gameState) ((snd gameState)!!frecv) maybeKeyboardInput
+  let new_entity          = entityStepperFunction ((snd gameState)!!frecv)  maybeKeyboardInput
+  return ((incompleteGameState, generateNewEntityList (snd gameState) new_entity frecv) :: GameState)
 
 
 main :: IO ()
-main = iterateM_ firstRun ((initialBoard, initialPacmanPosition)::GameState)
+main = do
+  clearScreen
+  putStrLn ""
+  putStrLn "     Who do you want to play with? : "
+  putStrLn "0 - Pacman "
+  putStrLn "1 - Ghost "
+  hFlush stdout
+  input <- getLine
+  let howOften = read input :: Int
+  iterateM_ (firstRun howOften) ((initialBoard, [initialPacmanPosition, initialGhostPosition])::GameState)
