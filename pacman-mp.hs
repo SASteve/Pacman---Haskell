@@ -76,7 +76,7 @@ initialBoard = [ [Solid , Solid  , Solid , Solid , Solid , Solid , Solid]
 initialPacmanPosition::Entity
 initialPacmanPosition = (1,1,0)
 initialGhostPosition::Entity
-initialGhostPosition = (3,4,1)
+initialGhostPosition = (3,3,1)
 
 modifyRightEntity::Entity->Entity
 modifyRightEntity ent = (first ent, second ent + 1, third ent)
@@ -100,7 +100,7 @@ moveRightEntity inputList ent =
 	let aux1 = zip [0..] inputList
 	    aux2 = map (\(i,l) -> (i,zip [0..] l)) aux1
 	    aux3 = map (\(i,l) -> map (\(j,x) -> ((i,j),x)) l) aux2
-	    aux4 = map (\((a,b),z) -> if (a,b) == (first ent, second ent) then ((a,b), Empty)  else  if (a,b) ==(first ent, second ent + 1) then ((a,b), getEntityBlock ent) else ((a,b),z)) $ concat aux3
+	    aux4 = map (\((a,b),z) -> if (a,b) == (first ent, second ent) then ((a,b), Empty)  else  if (a,b) == (first ent, second ent + 1) then ((a,b), getEntityBlock ent) else ((a,b),z)) $ concat aux3
 	in  chunksOf map_size $ map snd aux4
 
 moveLeftEntity::Board-> Entity->Board
@@ -144,6 +144,9 @@ entityStringPusher x = case x of 0 -> "P"--"▲"
 5->Globe
 6->Ghost
 -}
+
+
+
 printBlock::Block->Entity->String
 printBlock Solid  _ = " [X] "
 printBlock Empty  _ = " [ ] "
@@ -158,18 +161,18 @@ printBoard::Board->Entity->IO()
 printBoard gameBoard ent = putStrLn (concat $ map (\x -> printRow x ent) gameBoard)
 
 pureStepperFunction :: Board -> Entity -> Maybe Char -> Board
-pureStepperFunction board ent (Just 'd') = moveRightEntity board ent
-pureStepperFunction board ent (Just 's') = moveDownEntity board ent
-pureStepperFunction board ent (Just 'a') = moveLeftEntity board ent
-pureStepperFunction board ent (Just 'w') = moveUpEntity board ent
+pureStepperFunction board ent (Just 'd') = if(board!!(first ent)!!(second ent+1)/=Solid) then moveRightEntity board ent else board
+pureStepperFunction board ent (Just 's') = if(board!!(first ent+1)!!(second ent)/=Solid) then  moveDownEntity board ent else board
+pureStepperFunction board ent (Just 'a') = if(board!!(first ent)!!(second ent - 1)/=Solid) then moveLeftEntity board ent else board
+pureStepperFunction board ent (Just 'w') = if(board!!(first ent-1)!!(second ent)/=Solid) then moveUpEntity board ent else board
 pureStepperFunction board _ _ = board
 
-entityStepperFunction :: Entity -> Maybe Char -> Entity
-entityStepperFunction ent (Just 'd') = modifyRightEntity ent
-entityStepperFunction ent (Just 's') = modifyDownEntity ent
-entityStepperFunction ent (Just 'a') = modifyLeftEntity ent
-entityStepperFunction ent (Just 'w') = modifyUpEntity ent
-entityStepperFunction ent _ = ent
+entityStepperFunction :: Board-> Entity -> Maybe Char -> Entity
+entityStepperFunction board ent (Just 'd') = if(board!!(first ent)!!(second ent+1)/=Solid) then modifyRightEntity ent else ent
+entityStepperFunction board ent (Just 's') = if(board!!(first ent+1)!!(second ent)/=Solid) then modifyDownEntity ent else ent
+entityStepperFunction board ent (Just 'a') = if(board!!(first ent)!!(second ent - 1)/=Solid) then modifyLeftEntity ent else ent
+entityStepperFunction board ent (Just 'w') = if(board!!(first ent-1)!!(second ent)/=Solid) then modifyUpEntity ent else ent
+entityStepperFunction board ent _ = ent
 
 generateNewEntityList::[Entity]->Entity->Int->[Entity]
 generateNewEntityList entity_list new_entity position = 
@@ -184,7 +187,7 @@ firstRun frecv gameState = do
   maybeKeyboardInput <- runInputT defaultSettings $ getInputChar ""
   when ( maybeKeyboardInput == Just 'q' ) exitSuccess
   let incompleteGameState = pureStepperFunction (fst gameState) ((snd gameState)!!frecv) maybeKeyboardInput
-  let new_entity          = entityStepperFunction ((snd gameState)!!frecv)  maybeKeyboardInput
+  let new_entity          = entityStepperFunction (fst gameState) ((snd gameState)!!frecv)  maybeKeyboardInput
   return ((incompleteGameState, generateNewEntityList (snd gameState) new_entity frecv) :: GameState)
 
 
