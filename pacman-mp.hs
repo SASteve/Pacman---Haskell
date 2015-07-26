@@ -41,7 +41,7 @@ data Block = Empty | Solid | Pacman | Ghost deriving (Show, Read, Eq)
 type Entity = (Int, Int, Int)
 type Board = [[Block]]
 
-type GameState = (Board, [Entity])
+type GameState = (Board, Entity)
 
 
 first::Entity->Int
@@ -119,15 +119,16 @@ pureStepperFunction board ent (Just 'd') = moveRightEntity board ent
 entityStepperFunction :: Entity -> Maybe Char -> Entity
 entityStepperFunction ent (Just 'd') = modifyRightEntity ent
 
-firstRun::Board -> IO Board
+firstRun::GameState -> IO GameState
 firstRun gameState = do
   clearScreen
-  printBoard gameState
+  printBoard (fst gameState)
   maybeKeyboardInput <- runInputT defaultSettings $ getInputChar ""
   when ( maybeKeyboardInput == Just 'q' ) exitSuccess
-  let incompleteGameState = pureStepperFunction gameState initialPacmanPosition maybeKeyboardInput
-  return incompleteGameState
+  let incompleteGameState = pureStepperFunction (fst gameState) (snd gameState) maybeKeyboardInput
+  let new_entity          = entityStepperFunction (snd gameState) maybeKeyboardInput
+  return ((incompleteGameState, new_entity) :: GameState)
 
 
 main :: IO ()
-main = iterateM_ firstRun initialBoard
+main = iterateM_ firstRun ((initialBoard, initialPacmanPosition)::GameState)
