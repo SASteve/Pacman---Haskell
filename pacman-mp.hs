@@ -202,3 +202,8 @@ main = do
   input <- getLine
   let howOften = read input :: Int
   iterateM_ (firstRun howOften) ((initialBoard, [initialPacmanPosition, initialGhostPosition])::GameState)
+
+
+
+
+--take 10 $ concat $ repeat [1,0]
