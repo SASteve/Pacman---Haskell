@@ -25,15 +25,25 @@ import Control.Concurrent                                  ( forkIO )
 import Network                                             ( PortID(PortNumber)
                                                            , connectTo
                                                            , withSocketsDo
+                                                           , Socket
+                                                           , accept
+                                                           , listenOn
+                                                           , withSocketsDo
                                                            )
 import System.Environment                                  ( getArgs )
 import System.IO                                           ( BufferMode(LineBuffering)
                                                            , hClose
+                                                           , Handle
                                                            , hFlush
                                                            , hGetLine
+                                                           , hIsEOF
                                                            , hPutStrLn
                                                            , hSetBuffering
                                                            )
+
+
+
+
 
 
 data Block = Empty | Solid | Pacman | Ghost deriving (Show, Read, Eq)
@@ -203,6 +213,39 @@ main = do
   let howOften = read input :: Int
   iterateM_ (firstRun howOften) ((initialBoard, [initialPacmanPosition, initialGhostPosition])::GameState)
 
+client :: String -> IO ()
+client serverHost = withSocketsDo $ do
+  handle <- connectTo serverHost (PortNumber 1337)
+  hSetBuffering handle LineBuffering
+  maybeKeyboardInput <- runInputT defaultSettings $ getInputChar ""
+  hPutStrLn handle (show maybeKeyboardInput)
+  hFlush handle
+  s <- hGetLine handle
+  putStrLn s
+  hClose handle
+
+
+server :: IO ()
+server = withSocketsDo $ do
+  socket <- listenOn . PortNumber $ 1337
+  acceptLoop socket
+
+acceptLoop :: Socket -> IO ()
+acceptLoop socket = do
+  (handle, _, _) <- accept socket
+  _ <- forkIO $ ioServerLoop handle
+  acceptLoop socket
+
+ioServerLoop :: Handle -> IO ()
+ioServerLoop handle = do
+  hSetBuffering handle LineBuffering
+  eof <- hIsEOF handle
+  when (not eof) $ do
+    s <- hGetLine handle
+    putStrLn $ "Received: " ++ s
+    hPutStrLn handle $ "Sending this back to you: " ++ s
+    hFlush handle
+    ioServerLoop handle
 
 
 
