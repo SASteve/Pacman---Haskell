@@ -1,46 +1,45 @@
-import Data.Set                                            ( Set )
-import qualified Data.Set as S                             ( delete
-                                                           , empty
-                                                           , insert
-                                                           , member
-                                                           , size
-                                                           )
-import Data.List                                          
-import Control.Concurrent                                  ( threadDelay )
-import System.IO                                           ( hFlush
-                                                           , stdout
-                                                           )
-import System.Console.ANSI                                 ( clearScreen )
-import System.IO.Streams                                   ( InputStream )
-import qualified System.IO.Streams as SIOS                 ( fromList
-                                                           , read
-                                                           )
-import Control.Monad                                       ( when )
-import System.Exit                                         ( exitSuccess )
-import Control.Monad.Loops                                 ( iterateM_ )
-import System.Console.Haskeline                            ( runInputT, defaultSettings, getInputChar )
-import Data.List.Split                                     ( chunksOf )
-import Control.Monad                                       ( forever )
-import Control.Concurrent                                  ( forkIO )
-import Network                                             ( PortID(PortNumber)
-                                                           , connectTo
-                                                           , withSocketsDo
-                                                           , Socket
-                                                           , accept
-                                                           , listenOn
-                                                           , withSocketsDo
-                                                           )
-import System.Environment                                  ( getArgs )
-import System.IO                                           ( BufferMode(LineBuffering)
-                                                           , hClose
-                                                           , Handle
-                                                           , hFlush
-                                                           , hGetLine
-                                                           , hIsEOF
-                                                           , hPutStrLn
-                                                           , hSetBuffering
-                                                           )
-
+import Data.Set                             ( Set )
+import qualified Data.Set as S              ( delete
+                                            , empty
+                                            , insert
+                                            , member
+                                            , size
+                                            )
+import Data.List                           
+import Control.Concurrent                   ( threadDelay )
+import System.IO                            ( hFlush
+                                            , stdout
+                                            )
+import System.Console.ANSI                  ( clearScreen )
+import System.IO.Streams                    ( InputStream )
+import qualified System.IO.Streams as SIOS  ( fromList
+                                            , read
+                                            )
+import Control.Monad                        ( when )
+import System.Exit                          ( exitSuccess )
+import Control.Monad.Loops                  ( iterateM_ )
+import System.Console.Haskeline             ( runInputT, defaultSettings, getInputChar )
+import Data.List.Split                      ( chunksOf )
+import Control.Monad                        ( forever, when )
+import Control.Concurrent                   ( forkIO )
+import System.Environment                   ( getArgs )
+import Network                              ( PortID(PortNumber)
+                                            , Socket
+                                            , connectTo
+                                            , accept
+                                            , listenOn
+                                            , withSocketsDo
+                                            )
+import System.IO                            ( BufferMode(LineBuffering)
+                                            , Handle
+                                            , hFlush
+                                            , hGetLine
+                                            , hIsEOF
+                                            , hPutStrLn
+                                            , hSetBuffering
+                                            )
+import Safe                                 ( readMay )
+import Data.Maybe                           ( fromJust )
 
 
 
@@ -162,13 +161,16 @@ printBlock Solid  _ = " [X] "
 printBlock Empty  _ = " [ ] "
 printBlock Pacman _ = " [P] "
 printBlock Ghost  _ = " [G] "
-printBlock _ ent    = " [" ++ (entityStringPusher $ third ent) ++ "] "
+printBlock   _   ent= " [" ++ (entityStringPusher $ third ent) ++ "] "
 
 printRow::[Block]->Entity->String
 printRow boardRow ent = ( concat $ map (\x -> printBlock x ent) boardRow ) ++ "\n"
 
 printBoard::Board->Entity->IO()
 printBoard gameBoard ent = putStrLn (concat $ map (\x -> printRow x ent) gameBoard)
+
+hPrintBoard::Board->Entity->String
+hPrintBoard gameBoard ent = (concat $ map (\x -> printRow x ent) gameBoard)
 
 pureStepperFunction :: Board -> Entity -> Maybe Char -> Board
 pureStepperFunction board ent (Just 'd') = if(board!!(first ent)!!(second ent+1)/=Solid) then moveRightEntity board ent else board
@@ -190,62 +192,58 @@ generateNewEntityList entity_list new_entity position =
       aux2 = map (\(ent,index) -> if index == position then (new_entity, index) else (ent, index)) aux1
   in  map (fst) aux2
 
-firstRun::Int->GameState->IO GameState
-firstRun frecv gameState = do
-  clearScreen
-  printBoard (fst gameState) ((snd gameState)!!frecv)
-  maybeKeyboardInput <- runInputT defaultSettings $ getInputChar ""
-  when ( maybeKeyboardInput == Just 'q' ) exitSuccess
-  let incompleteGameState = pureStepperFunction (fst gameState) ((snd gameState)!!frecv) maybeKeyboardInput
-  let new_entity          = entityStepperFunction (fst gameState) ((snd gameState)!!frecv)  maybeKeyboardInput
-  return ((incompleteGameState, generateNewEntityList (snd gameState) new_entity frecv) :: GameState)
+--firstRun::GameState->IO GameState
+--firstRun gameState = do
+--  clearScreen
+--  printBoard (fst gameState) ((snd gameState)!!entityType)
+--  maybeKeyboardInput <- runInputT defaultSettings $ getInputChar ""
+--  when ( maybeKeyboardInput == Just 'q' ) exitSuccess
+--  let incompleteGameState = pureStepperFunction (fst gameState) ((snd gameState)!!entityType) maybeKeyboardInput
+--  let new_entity          = entityStepperFunction (fst gameState) ((snd gameState)!!entityType)  maybeKeyboardInput
+--  return ((incompleteGameState, generateNewEntityList (snd gameState) new_entity entityType) :: GameState)
 
 
 main :: IO ()
-main = do
-  clearScreen
-  putStrLn ""
-  putStrLn "     Who do you want to play with? : "
-  putStrLn "0 - Pacman "
-  putStrLn "1 - Ghost "
-  hFlush stdout
-  input <- getLine
-  let howOften = read input :: Int
-  iterateM_ (firstRun howOften) ((initialBoard, [initialPacmanPosition, initialGhostPosition])::GameState)
-
-client :: String -> IO ()
-client serverHost = withSocketsDo $ do
-  handle <- connectTo serverHost (PortNumber 1337)
-  hSetBuffering handle LineBuffering
-  maybeKeyboardInput <- runInputT defaultSettings $ getInputChar ""
-  hPutStrLn handle (show maybeKeyboardInput)
-  hFlush handle
-  s <- hGetLine handle
-  putStrLn s
-  hClose handle
-
-
-server :: IO ()
-server = withSocketsDo $ do
-  socket <- listenOn . PortNumber $ 1337
+main = withSocketsDo $ do
+  socket <- listenOn . PortNumber $ 8181
   acceptLoop socket
+
+
+  --hFlush stdout
+  --iterateM_ firstRun ((initialBoard, [initialPacmanPosition, initialGhostPosition])::GameState)
 
 acceptLoop :: Socket -> IO ()
 acceptLoop socket = do
   (handle, _, _) <- accept socket
-  _ <- forkIO $ ioServerLoop handle
+  _ <- forkIO $ ioServerLoop ((initialBoard, [initialPacmanPosition, initialGhostPosition])::GameState) handle
   acceptLoop socket
 
-ioServerLoop :: Handle -> IO ()
-ioServerLoop handle = do
+ioServerLoop :: GameState -> Handle -> IO ()
+ioServerLoop gameState handle = do
   hSetBuffering handle LineBuffering
   eof <- hIsEOF handle
   when (not eof) $ do
     s <- hGetLine handle
-    putStrLn $ "Received: " ++ s
-    hPutStrLn handle $ "Sending this back to you: " ++ s
+    clearScreen
+    putStrLn $ s 
+    let extractedTpl = fromJust ((readMay s) :: Maybe (Int,  Maybe Char))
+    let entityType   = fst extractedTpl
+    let entityMove   = snd extractedTpl
+    print entityType
+    print entityMove
+
+   
+
+    let incompleteGameState = pureStepperFunction (fst gameState) ((snd gameState)!!entityType) entityMove
+    let new_entity          = entityStepperFunction (fst gameState) ((snd gameState)!!entityType)  entityMove
+    let newGameState = ((incompleteGameState, generateNewEntityList (snd gameState) new_entity entityType) :: GameState)
+    printBoard (fst newGameState) ((snd newGameState)!!entityType)
+    hPutStrLn handle $ "Stuff was recieved."
+    --hPrintBoard (fst newGameState) ((snd newGameState)!!entityType)
     hFlush handle
-    ioServerLoop handle
+
+    ioServerLoop newGameState handle
+
 
 
 
